@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trade ledger · Zerodha multi-account dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Trade ledger</h1>
+    <p class="sub" id="subtitle"></p>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button role="tab" data-tab="trades" aria-selected="false">Trades</button>
+    <button role="tab" data-tab="import" aria-selected="false">Import</button>
+    <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
+  </nav>
+</header>
+
+<section class="filters" id="filters" aria-label="Filters">
+  <label class="f">Account<select id="fAccount"></select></label>
+  <label class="f">Strategy<select id="fStrategy"></select></label>
+  <label class="f">Segment<select id="fSegment"></select></label>
+  <label class="f">Period
+    <select id="fPreset">
+      <option value="">Custom</option>
+      <option value="all">All time</option>
+      <option value="fy">This financial year</option>
+      <option value="lfy">Last financial year</option>
+      <option value="month">This month</option>
+      <option value="30">Last 30 days</option>
+    </select>
+  </label>
+  <label class="f">From<input type="date" id="fFrom"></label>
+  <label class="f">To<input type="date" id="fTo"></label>
+  <button class="btn" id="fClear">Clear filters</button>
+</section>
+
+<main>
+  <!-- OVERVIEW -->
+  <section class="tab active" id="tab-overview" role="tabpanel">
+    <div class="empty" id="overviewEmpty" hidden>
+      <h2>Nothing to show yet</h2>
+      <p>Add your Zerodha accounts and strategies, then import a tradebook CSV for each account. Or load demo data to see how the dashboard works.</p>
+      <div class="row-gap">
+        <button class="btn primary" data-goto="setup">Add accounts</button>
+        <button class="btn" data-action="demo">Load demo data</button>
+      </div>
+    </div>
+
+    <div id="overviewBody">
+      <div class="ledger" id="kpis"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Cumulative net P&amp;L</h2>
+          <select id="curveMode" aria-label="Split the curve">
+            <option value="total">Combined</option>
+            <option value="account">Split by account</option>
+            <option value="strategy">Split by strategy</option>
+          </select>
+        </div>
+        <div class="chart-box"><canvas id="curve"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Account × strategy</h2>
+          <p class="hint">Net P&amp;L for the selected period. Click a cell to filter the whole dashboard to it.</p>
+        </div>
+        <div class="scroll" id="matrix"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head"><h2>Monthly net P&amp;L</h2></div>
+          <div class="chart-box short"><canvas id="monthly"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Performance</h2>
+            <div class="seg" role="group" aria-label="Group performance by">
+              <button data-bd="strategy" aria-pressed="true">By strategy</button>
+              <button data-bd="account" aria-pressed="false">By account</button>
+            </div>
+          </div>
+          <div class="scroll" id="breakdown"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Open positions</h2>
+          <p class="hint">Buys and sells that haven't been matched yet. Options that expired have no closing trade in the tradebook, so settle them here.</p>
+        </div>
+        <div class="scroll" id="open"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRADES -->
+  <section class="tab" id="tab-trades" role="tabpanel">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Trades</h2>
+        <input type="text" id="tSearch" placeholder="Search symbol" aria-label="Search symbol">
+      </div>
+      <p class="hint" id="tradeCount"></p>
+      <div class="bulk">
+        <button class="btn" id="selectAll">Select all matching</button>
+        <button class="btn" id="selectNone">Clear selection</button>
+        <span class="bulk-sep"></span>
+        <label class="inline">Tag selected as <select id="bulkStrategy"></select></label>
+        <button class="btn primary" id="bulkApply">Apply tag</button>
+        <button class="btn danger" id="bulkDelete">Delete selected</button>
+      </div>
+      <div class="scroll"><table id="tradesTable"></table></div>
+      <div class="pager" id="pager"></div>
+    </div>
+
+    <details class="panel">
+      <summary><h2>Add a trade manually</h2></summary>
+      <div class="form-row" style="margin-top:14px">
+        <label class="f">Account<select id="mAccount"></select></label>
+        <label class="f">Strategy<select id="mStrategy"></select></label>
+        <label class="f">Date<input type="date" id="mDate"></label>
+        <label class="f">Time<input type="time" id="mTime" step="1" value="09:15:00"></label>
+        <label class="f">Symbol<input type="text" id="mSymbol" placeholder="NIFTY24DEC24000CE"></label>
+        <label class="f">Segment
+          <select id="mSegment"><option>FO</option><option>EQ</option><option>CDS</option><option>MCX</option></select>
+        </label>
+        <label class="f">Side<select id="mSide"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+        <label class="f">Quantity<input type="number" id="mQty" min="1" step="1"></label>
+        <label class="f">Price<input type="number" id="mPrice" min="0" step="0.05"></label>
+        <button class="btn primary" id="mAdd">Add trade</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- IMPORT -->
+  <section class="tab" id="tab-import" role="tabpanel">
+    <div class="panel narrow">
+      <h2>Import a Zerodha tradebook</h2>
+      <ol class="steps">
+        <li>Log in to <a href="https://console.zerodha.com" target="_blank" rel="noopener">console.zerodha.com</a> with the account you want to import.</li>
+        <li>Open Reports, then Tradebook. Pick a segment and date range and download the CSV. Repeat for each segment you trade (Equity, F&amp;O, Currency, Commodity).</li>
+        <li>Choose the matching account below and import the files. Trades already imported are skipped, so overlapping date ranges are safe.</li>
+      </ol>
+      <div class="form-row">
+        <label class="f">Account<select id="iAccount"></select></label>
+        <label class="f">Tag trades as<select id="iStrategy"></select></label>
+      </div>
+      <div class="form-row">
+        <input type="file" id="iFile" accept=".csv,text/csv" multiple aria-label="Tradebook CSV files">
+        <button class="btn primary" id="iRun">Import trades</button>
+      </div>
+      <p class="result" id="importResult" role="status"></p>
+      <p class="hint">Files are read in your browser. Nothing is uploaded anywhere; your data is saved in this browser's storage only.</p>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section class="tab" id="tab-setup" role="tabpanel">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Accounts</h2>
+        <p class="hint">One entry per Zerodha login, for example yourself, a spouse, or an HUF.</p>
+        <div class="form-row">
+          <label class="f">Name<input type="text" id="aName" placeholder="Self"></label>
+          <label class="f">Client ID<input type="text" id="aClient" placeholder="AB1234"></label>
+          <button class="btn primary" id="aAdd">Add account</button>
+        </div>
+        <div class="scroll" id="accountsList"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Strategies</h2>
+        <p class="hint">Each trade can belong to one strategy. Untagged trades show as Unassigned.</p>
+        <div class="form-row">
+          <label class="f">Name<input type="text" id="sName" placeholder="Nifty short straddle"></label>
+          <label class="f">Colour<input type="color" id="sColor" value="#2F4DA8"></label>
+          <button class="btn primary" id="sAdd">Add strategy</button>
+        </div>
+        <div class="scroll" id="strategiesList"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Auto-tagging rules</h2>
+      <p class="hint">Imported trades are tagged by the first rule whose pattern matches the symbol. Use * as a wildcard: <b>NIFTY*CE</b> matches Nifty calls, <b>BANKNIFTY*</b> matches all Bank Nifty contracts. A pattern without * matches anywhere in the symbol.</p>
+      <div class="form-row">
+        <label class="f">Symbol pattern<input type="text" id="rPattern" placeholder="BANKNIFTY*"></label>
+        <label class="f">Account<select id="rAccount"></select></label>
+        <label class="f">Strategy<select id="rStrategy"></select></label>
+        <button class="btn primary" id="rAdd">Add rule</button>
+        <button class="btn" id="rApply">Apply rules to unassigned trades</button>
+      </div>
+      <div class="scroll" id="rulesList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Charges and adjustments</h2>
+      <p class="hint">P&amp;L from trades is gross. Record brokerage, STT and other charges here as negative amounts (Console's P&amp;L report shows them per account), so net figures match your statement.</p>
+      <div class="form-row">
+        <label class="f">Date<input type="date" id="jDate"></label>
+        <label class="f">Account<select id="jAccount"></select></label>
+        <label class="f">Strategy<select id="jStrategy"></select></label>
+        <label class="f">Amount (₹)<input type="number" id="jAmount" step="0.01" placeholder="-4520"></label>
+        <label class="f grow">Note<input type="text" id="jNote" placeholder="October charges"></label>
+        <button class="btn primary" id="jAdd">Add entry</button>
+      </div>
+      <div class="scroll tall" id="adjList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Backup</h2>
+      <p class="hint">Data lives in this browser only. Export a backup regularly, and import it to move to another browser or device.</p>
+      <div class="row-gap">
+        <button class="btn primary" id="bExport">Export backup</button>
+        <label class="btn">Import backup<input type="file" id="bImport" accept=".json,application/json" hidden></label>
+        <button class="btn" data-action="demo">Load demo data</button>
+        <button class="btn danger" id="bReset">Delete all data</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
